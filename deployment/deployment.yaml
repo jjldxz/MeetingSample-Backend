@@ -1,0 +1,85 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: meeting-sample-svc
+  namespace: saas
+spec:
+  selector:
+    app: meeting-sample
+    version: v1
+  type: NodePort
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: 80
+      nodePort: 30912
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: meeting-sample
+  namespace: saas
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: meeting-sample
+  namespace: saas
+  labels:
+    app: meeting-sample
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: meeting-sample
+  template:
+    metadata:
+      labels:
+        app: meeting-sample
+        version: v1
+    spec:
+      imagePullSecrets:
+      - name: harbor-1
+      containers:
+      - name: meeting-sample
+        image: ${CICD_IMAGE}:${CICD_GIT_BRANCH}-${CICD_EXECUTION_SEQUENCE}-${CICD_GIT_COMMIT}
+        ports:
+        - containerPort: 80
+          name: http
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /meeting_sample/meeting/migrations
+          name: backend-vol
+          subPath: meeting
+        env:
+        - name: DATABASE_URL
+          value: mysql://admin:Abc,123.@192.168.11.143:3306/meeting_sample?charset=utf8mb4
+        - name: DB_CONN_MAX_AGE
+          value: "3600"
+        - name: APP_KEY
+          value: e1bceece692f4ea39a25df3ea000a96d
+        - name: APP_SECRET
+          value: 8b14d31b1c314687
+        - name: SALT
+          value: jjldxz@20210812L
+        - name: REDIS_HOST
+          value: redis://redis-master.redis:6379/3
+        - name: REDIS_CLUSTER_ENABLED
+          value: "False"
+        - name: REDIS_PASSWORD
+        - name: REDIS_PREFIX
+          value: meeting_sample
+        - name: LVB_HOST
+          value: http://krakend-svc
+      volumes:
+      - name: backend-vol
+        persistentVolumeClaim:
+          claimName: meeting-sample
