@@ -318,17 +318,17 @@ class StopMeetingAPI(APIView):
             raise PermissionDenied(err)
 
         if meeting.status != Meeting.RoomStatus.CLOSED:
-            try:
-                Meeting.objects.filter(call_number=number). \
-                    update(status=Meeting.RoomStatus.CLOSED,
-                           closed_by=invoker,
-                           actually_end_at=datetime.datetime.utcnow())
-            except Exception as e:
-                logger.error(f'failed to update meeting status: {e}')
-                err = ERROR['MEETING_INFO_DATABASE']
-                err['data'] = str(e)
-                raise APIException(err)
-            stopped = StopMeetingAPI.stop_lvb_room(meeting, number)
+            if StopMeetingAPI.stop_lvb_room(meeting, number):
+                try:
+                    Meeting.objects.filter(call_number=number). \
+                        update(status=Meeting.RoomStatus.CLOSED,
+                               closed_by=invoker,
+                               actually_end_at=datetime.datetime.utcnow())
+                except Exception as e:
+                    logger.error(f'failed to update meeting status: {e}')
+                    err = ERROR['MEETING_INFO_DATABASE']
+                    err['data'] = str(e)
+                    raise APIException(err)
 
         # if call LVB error, stop it again
         if cache.is_meeting_open(number):
@@ -347,11 +347,11 @@ class StopMeetingAPI(APIView):
             lvb_token = encryption.encode(APP_SECRET, token_src)
 
             try:
-                lvb_room_id = lvb.stop_lvb_room(lvb_token)
+                sts, lvb_room_id = lvb.stop_lvb_room(lvb_token)
             except Exception as e:
                 logger.error(f'call lvb stop error: {e}')
                 return False
-            logger.info(f'success: close lvb room: {lvb_room_id}')
+            logger.info(f'success: {sts}, close lvb room: {lvb_room_id}')
 
         cache.close_meeting(number)
         cache.delay_queue.pop(number)
